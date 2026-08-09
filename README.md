@@ -30,4 +30,7 @@ Update .gitignore to ignore more not necessary components
 Fixed __init__.py to have raw value string to not show warning
 Added persistent Node 20 solution through .nvmrc
 Added symlink script for having /dist in /backend too through package.json
-
+## Upd 3
+http://localhost:9000/examples/candlestick.html finally works - I changed the line that had hard-coded path to this:
+<script src="https://unpkg.com/d3fc@15.2.4/build/d3fc.js"></script>
+- So now the example K-lines work
