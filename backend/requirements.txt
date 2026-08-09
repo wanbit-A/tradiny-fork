@@ -1,0 +1,19 @@
+fastapi 
+uvicorn
+websockets
+websocket-client
+fastapi-utils
+typing-inspect
+python-dotenv
+SQLAlchemy
+pywebpush
+openai>=1.0.0,<2
+httpx[http2]
+pygad
+
+python-binance
+polygon-api-client
+pyti
+pandas-ta @ https://www.pandas-ta.dev/assets/zip/pandas_ta-0.4.25b0.tar.gz
+setuptools
+cachetools
