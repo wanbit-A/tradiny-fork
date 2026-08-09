@@ -266,6 +266,7 @@ def initialize_providers():
         ("POLYGON_IO_API_KEY", "data_providers.polygon", "PolygonProvider", True),
         ("BINANCE_API_KEY", "data_providers.binance", "BinanceProvider", True),
         ("dummy", "data_providers.hyperliquid", "HyperliquidProvider", False),
+        ("CCXT_EXCHANGE_ID", "data_providers.ccxt_provider", "CCXTProvider", False),
     ]
 
     for env_key, config_path, provider_class, require_api_key in provider_configs:

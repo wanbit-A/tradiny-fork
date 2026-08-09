@@ -1,4 +1,4 @@
-# Tradiny
+# Tradiny (Fork)
 
 Tradiny is a lightweight yet full-featured, highly-extensible, open-source charting platform. Draw time-series data such as line charts or candlestick charts. 
 
@@ -12,6 +12,7 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - **Great User Experience**: Pan and zoom, autoscale, save charts, etc.
 - **Themes**: Dark, white, custom, etc.
 - **Data Sources**: CSV, finance — stocks 32k, options 1.5M, indices 11k, forex 1.7k, crypto 1k (Polygon.io and Binance).
+> Added CCXT support
 - **Statistical and Finance Indicators**: 160+ indicators.
 - **Advanced Alerting**: Cross-asset, cross time-frame real-time zero-delay alerting.
 - **Market Scanner**: Scan for real-time data and assets matching user-defined rules and export to CSV.
@@ -26,7 +27,7 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - Added .env to .gitignore
 > Small but important
 ## Upd: 2
-- Update .gitignore to ignore more not necessary components
+- Update .gitignore to ignore more unnecessary components
 - Added run-linux.md & run-node.md to actually run the Tradiny with less errors
 - Fixed __init__.py to have raw value string to not show warning
 - Added persistent Node 20 solution through .nvmrc
@@ -40,3 +41,11 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - The previous value was dynamically building the config.url by looking at your browser's current address bar.
 - If you are viewing the page at http://localhost:9000, this code sets the url to localhost:9000. The library then attempts to open a WebSocket connection to ws://localhost:9000/websocket/.
 > That's why I decided to hard-code the URL to backend's (8999) (and now it works!)
+## Upd: 5
+- Added CCXT support
+- Fixed many bugs for CCXT to work
+### .env Support:
+> Add these values to your .env file:
+CCXT_EXCHANGE_ID=binance # or any other supported by the CCXT
+CCXT_API_KEY=key
+CCXT_API_SECRET=secret

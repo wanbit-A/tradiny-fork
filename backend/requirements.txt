@@ -17,3 +17,4 @@ pyti
 pandas-ta
 setuptools
 cachetools
+ccxt

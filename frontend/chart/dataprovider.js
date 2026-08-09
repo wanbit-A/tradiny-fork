@@ -679,11 +679,13 @@ export class DataProvider {
               }
             }
 
-            this.chart.addWindow();
-            console.error("No data.");
+            // ⬇️ The line that was crashing you
+            // this.chart.addWindow();   ← DELETE THIS LINE
+            console.error("No data for", message.source, message.name, message.interval);
           }
 
           if (message.data.length > 0) {
+            // ... happy path unchanged ...
             if (message.metadata) {
               this.keyToMetadata[`${message["source"]}-${message["name"]}`] =
                 message.metadata;

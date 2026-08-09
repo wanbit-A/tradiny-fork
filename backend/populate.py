@@ -34,6 +34,8 @@ def main():
             "dummy",
             "data_providers.hyperliquid.HyperliquidProvider",
         ),  # Dummy key since Hyperliquid doesn't require API for public data
+        # CCXT Provider — no API key required for public data
+        ("dummy", "data_providers.ccxt_provider.CCXTProvider"),
     ]
 
     for api_key, provider_path in providers:
