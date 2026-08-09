@@ -18,19 +18,25 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - **ChatGPT Integration**: Analyze and interpret charts with ChatGPT.
 
 # Updates by wanbit-A
-## Upd 1
-### Portainer port:8000 conflict
-Since my portainer instance was using port 8K for its workers, I decided to switch backend's port from 8K to 8999
+## Upd: 1
+> Portainer port:8000 conflict
+- Since my portainer instance was using port 8K for its workers, I decided to switch backend's port from 8K to 8999
 - Why 8999? Because frontend is 9K and it kinda makes sense
-### Added .env to .gitignore
-Small but important
-## Upd 2
-Update .gitignore to ignore more not necessary components
+
+- Added .env to .gitignore
+> Small but important
+## Upd: 2
+- Update .gitignore to ignore more not necessary components
 - Added run-linux.md & run-node.md to actually run the Tradiny with less errors
-Fixed __init__.py to have raw value string to not show warning
-Added persistent Node 20 solution through .nvmrc
-Added symlink script for having /dist in /backend too through package.json
-## Upd 3
-http://localhost:9000/examples/candlestick.html finally works - I changed the line that had hard-coded path to this:
-<script src="https://unpkg.com/d3fc@15.2.4/build/d3fc.js"></script>
+- Fixed __init__.py to have raw value string to not show warning
+- Added persistent Node 20 solution through .nvmrc
+- Added symlink script for having /dist in /backend too through package.json
+> Added comma so the script will work
+## Upd: 3
+- Example (http://localhost:9000/examples/candlestick.html) finally works - I changed the line that had hard-coded path to have this instead:"https://unpkg.com/d3fc@15.2.4/build/d3fc.js"
 - So now the example K-lines work
+### Upd: 4
+- const url line (index.html) is the bridge between your frontend (the HTML page) and your backend (the Tradiny data server). 
+- The previous value was dynamically building the config.url by looking at your browser's current address bar.
+- If you are viewing the page at http://localhost:9000, this code sets the url to localhost:9000. The library then attempts to open a WebSocket connection to ws://localhost:9000/websocket/.
+> That's why I decided to hard-code the URL to backend's (8999) (and now it works!)

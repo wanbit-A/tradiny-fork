@@ -41,7 +41,8 @@ For more details, refer to the LICENSE file in the root directory of this projec
     <script src="/tradiny.js"></script>
 
     <script>
-      const url = `${window.location.hostname}${window.location.port ? `:${window.location.port}` : ""}`;
+  // Hardcode the backend port
+  const url = `${window.location.hostname}:8999`; 
 
       var chart = TradinyChart.initialize({
         elementId: "chart",
