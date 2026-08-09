@@ -12,7 +12,7 @@
 
 import warnings
 
-warnings.filterwarnings("ignore", module="pygad\..*")
+warnings.filterwarnings("ignore", module=r"pygad\..*")
 import random
 import pygad
 import websocket

@@ -18,9 +18,16 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - **ChatGPT Integration**: Analyze and interpret charts with ChatGPT.
 
 # Updates by wanbit-A
-## Portainer port:8000 conflict
+## Upd 1
+### Portainer port:8000 conflict
 Since my portainer instance was using port 8K for its workers, I decided to switch backend's port from 8K to 8999
 - Why 8999? Because frontend is 9K and it kinda makes sense
-## Added .env to .gitignore
+### Added .env to .gitignore
 Small but important
+## Upd 2
+Update .gitignore to ignore more not necessary components
+- Added run-linux.md & run-node.md to actually run the Tradiny with less errors
+Fixed __init__.py to have raw value string to not show warning
+Added persistent Node 20 solution through .nvmrc
+Added symlink script for having /dist in /backend too through package.json
 
