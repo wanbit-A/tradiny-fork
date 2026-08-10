@@ -25,9 +25,9 @@ from db import (
     search_data_entities,
     get_metadata,
     get_alerts_by_client_id,
+    get_alert_by_id,
     update_alert_settings,
     delete_alert,
-    get_alert_by_id,
 )
 from config import Config
 from openai_gpt import query, query_reply
@@ -118,9 +118,13 @@ async def websocket_endpoint(
             await handle_message(websocket, data, alert_queue, scanner_queue)
     except WebSocketDisconnect:
         pass
+    except RuntimeError as e:
+        if "not connected" in str(e) or "disconnect" in str(e).lower():
+            logging.info(f"WebSocket client disconnected: {e}")
+        else:
+            logging.error(f"WebSocket RuntimeError: {e}")
     except Exception as e:
         logging.error(f"WebSocket error: {e}")
-        raise e
     finally:
         if client_ip in ip_conns:
             ip_conns[client_ip] -= 1
@@ -339,7 +343,7 @@ async def process_message(
                 if a["expire_date"] and a["expire_date"] < now:
                     return "expired"
                 if a["next_tick"] == 0:
-                    return "triggered"  # matched last tick, cooling down
+                    return "matched"
                 return "active"
 
             await safe_send_message(
@@ -358,16 +362,6 @@ async def process_message(
                                     if a["created_at"]
                                     else None
                                 ),
-                                "notified_at": (
-                                    a["notified_at"].isoformat()
-                                    if a["notified_at"]
-                                    else None
-                                ),
-                                "expire_date": (
-                                    a["expire_date"].isoformat()
-                                    if a["expire_date"]
-                                    else None
-                                ),
                             }
                             for a in alerts
                         ],
@@ -378,55 +372,50 @@ async def process_message(
         elif d.get("type") == "update_alert":
             alert_id = d.get("id")
             client_id = d.get("client_id")
-            existing = get_alert_by_id(dbconn, alert_id) if alert_id else None
+            success = False
 
-            # Only allow editing an alert that belongs to this browser client
-            if (
-                existing
-                and client_id
-                and existing["settings"].get("client_id") == client_id
-            ):
-                new_settings = dict(existing["settings"])
-                if "message" in d:
-                    new_settings["message"] = d["message"]
-                if "webhook_url" in d:
-                    new_settings["webhook_url"] = d["webhook_url"]
-                update_alert_settings(dbconn, alert_id, new_settings)
-                await safe_send_message(
-                    websocket,
-                    json.dumps({"type": "alert_updated", "id": alert_id}),
-                )
-            else:
-                await safe_send_message(
-                    websocket,
-                    json.dumps(
-                        {"type": "notification", "message": "Error: Alert not found"}
-                    ),
-                )
+            if alert_id:
+                existing = get_alert_by_id(dbconn, alert_id)
+                if existing and existing["settings"].get("client_id") == client_id:
+                    settings = existing["settings"]
+                    if "message" in d:
+                        settings["message"] = d["message"]
+                    if "webhook_url" in d:
+                        settings["webhook_url"] = d["webhook_url"]
+                    update_alert_settings(dbconn, alert_id, settings)
+                    success = True
+
+            await safe_send_message(
+                websocket,
+                json.dumps(
+                    {
+                        "type": "alert_updated",
+                        "id": alert_id,
+                        "success": success,
+                    }
+                ),
+            )
 
         elif d.get("type") == "delete_alert":
             alert_id = d.get("id")
             client_id = d.get("client_id")
-            existing = get_alert_by_id(dbconn, alert_id) if alert_id else None
+            success = False
 
-            if (
-                existing
-                and client_id
-                and existing["settings"].get("client_id") == client_id
-            ):
-                delete_alert(dbconn, alert_id)
-                await safe_send_message(
-                    websocket,
-                    json.dumps({"type": "alert_deleted", "id": alert_id}),
-                )
-            else:
-                await safe_send_message(
-                    websocket,
-                    json.dumps(
-                        {"type": "notification", "message": "Error: Alert not found"}
-                    ),
-                )
+            if alert_id:
+                existing = get_alert_by_id(dbconn, alert_id)
+                if existing and existing["settings"].get("client_id") == client_id:
+                    success = delete_alert(dbconn, alert_id)
 
+            await safe_send_message(
+                websocket,
+                json.dumps(
+                    {
+                        "type": "alert_deleted",
+                        "id": alert_id,
+                        "success": success,
+                    }
+                ),
+            )
         elif d.get("type") == "vapid_public_key":
             await safe_send_message(
                 websocket,

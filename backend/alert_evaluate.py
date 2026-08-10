@@ -90,6 +90,12 @@ def build_context(alert, event, data_values=None, lastDataPoint=None):
 def alert_evaluate(dbconn, message, alert, data):
 
     alert = get_alert_by_id(dbconn, alert["id"])
+    if alert is None:
+        logging.info(f"Alert no longer exists, closing subscription for alert_id={alert['id']}")
+        create_task(data["websocket_client"].close())
+        data["in_progress"] = False
+        return
+
     alert_message = alert["settings"]["message"]
     now = datetime.now(timezone.utc)
 
@@ -132,7 +138,11 @@ def alert_evaluate(dbconn, message, alert, data):
     operators = alert["settings"]["operators"]
     indicators = alert["settings"]["indicators"]
 
-    result, data_values = rules_evaluate(rules, operators, indicators, lastDataPoint)
+    rules_result = rules_evaluate(rules, operators, indicators, lastDataPoint)
+    if rules_result is None:
+        logging.debug(f"Alert {alert['id']}: rules_evaluate returned None (data not ready yet)")
+        return
+    result, data_values = rules_result
 
     if result and alert["next_tick"] == 1:
         logging.info(f"alert {alert['id']} matched")

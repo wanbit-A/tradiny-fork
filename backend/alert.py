@@ -87,6 +87,9 @@ async def process_queue(async_queue: asyncio.Queue, i: int):
                 asyncio.create_task(websocket_subscribe(async_queue, alert, i))
             elif action == "alert":
                 alert = db.get_alert_by_id(dbconn, task["alert_id"])
+                if alert is None:
+                    logging.info(f"Skipping startup of deleted alert {task['alert_id']}")
+                    continue
                 asyncio.create_task(websocket_subscribe(async_queue, alert, i))
             elif action == "update":
                 message = json.loads(task["message"])

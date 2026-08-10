@@ -59,3 +59,5 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - Chart shows real time price updates
 ## Upd: 8
 - Added webhook support for the alerts and refined it
+### Upd: 9
+- Added alert management through UI

@@ -1155,35 +1155,54 @@ export class DOMControlsHandler {
 
   refreshAlertsList() {
     const listEl = this.chart.d3ContainerEl.select(".alerts-list-body");
-    listEl.html('<div class="alerts-list-loading">Loading...</div>');
+    listEl.html('<div class="alert-loading">Loading...</div>');
 
     this.chart.dataProvider.listAlerts((alerts) => {
       listEl.html("");
 
       if (!alerts || alerts.length === 0) {
-        listEl.html('<div class="alerts-list-empty">No alerts yet.</div>');
+        listEl.html('<div class="alert-empty">No alerts yet.</div>');
         return;
       }
 
       for (const a of alerts) {
         const itemEl = listEl.append("div").attr("class", "alert-item");
-        itemEl
-          .append("div")
+
+        // Header: status + created time
+        const headerEl = itemEl.append("div").attr("class", "alert-item-header");
+        headerEl
+          .append("span")
           .attr("class", `alert-item-status alert-item-status-${a.status}`)
           .text(a.status);
-        itemEl
+        if (a.created_at) {
+          headerEl
+            .append("span")
+            .attr("class", "alert-item-date")
+            .text(new Date(a.created_at).toLocaleString());
+        }
+
+        // Message field
+        const msgGroup = itemEl.append("div").attr("class", "alert-field");
+        msgGroup.append("label").text("Message");
+        msgGroup
           .append("textarea")
           .attr("class", "alert-item-message")
           .attr("data-id", a.id)
+          .attr("rows", 2)
           .property("value", a.message || "");
-        itemEl
+
+        // Webhook field
+        const whGroup = itemEl.append("div").attr("class", "alert-field");
+        whGroup.append("label").text("Webhook URL");
+        whGroup
           .append("input")
           .attr("type", "text")
           .attr("class", "alert-item-webhook")
           .attr("data-id", a.id)
-          .attr("placeholder", "Webhook URL (optional)")
+          .attr("placeholder", "https://example.com/webhook")
           .property("value", a.webhook_url || "");
 
+        // Actions
         const actionsEl = itemEl.append("div").attr("class", "alert-item-actions");
         actionsEl
           .append("input")
@@ -1193,6 +1212,7 @@ export class DOMControlsHandler {
         actionsEl
           .append("input")
           .attr("type", "button")
+          .attr("class", "alert-btn-delete")
           .attr("value", "Delete")
           .on("click", () => this.deleteAlertItem(a.id));
       }
