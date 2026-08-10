@@ -46,6 +46,9 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - Fixed many bugs for CCXT to work
 ### .env Support:
 > Add these values to your .env file:
-CCXT_EXCHANGE_ID=binance # or any other supported by the CCXT
-CCXT_API_KEY=key
-CCXT_API_SECRET=secret
+- CCXT_EXCHANGE_ID=binance # or any other supported by the CCXT
+- CCXT_API_KEY=key
+- CCXT_API_SECRET=secret
+### Upd: 6
+- Changed hardcoded values of CCXT_EXCHANGE_ID to get from .env instead
+- Reduced polling time from 10s to 1s (MEXC specific)

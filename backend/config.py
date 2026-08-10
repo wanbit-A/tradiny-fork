@@ -16,9 +16,6 @@ import os
 load_dotenv()
 
 # Metadata for configuration variables: (name, default, description)
-CCXT_EXCHANGE_ID = os.environ.get("CCXT_EXCHANGE_ID", "binance")  # e.g. "binance", "kraken", "okx"
-CCXT_API_KEY = os.environ.get("CCXT_API_KEY", "")
-CCXT_API_SECRET = os.environ.get("CCXT_API_SECRET", "")
 CONFIG_FIELDS = [
     ("HOST", "0.0.0.0", "Server host address"),
     ("PORT", "8999", "Server port number"),
@@ -34,6 +31,9 @@ CONFIG_FIELDS = [
     ),
     ("BINANCE_API_SECRET", "", "API secret for Binance"),
     ("POLYGON_IO_API_KEY", "", "API key for Polygon.io"),
+    ("CCXT_EXCHANGE_ID", "binance", "CCXT exchange id (e.g. binance, mexc, okx)"),
+    ("CCXT_API_KEY", "", "CCXT API key (optional for public data)"),
+    ("CCXT_API_SECRET", "", "CCXT API secret (optional for public data)"),
     
     (
         "POLYGON_MARKETS",

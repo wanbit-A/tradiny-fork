@@ -48,7 +48,8 @@ class CCXTProvider(Provider):
     # POLL_REFRESH_SEC so the in-progress candle is visible, instead of
     # waiting 86400s for the day to close. Tune for your exchange's
     # rate-limit budget (Binance public = 1200 req/min, 10s is fine).
-    POLL_REFRESH_SEC = 10
+    # For MEXC - 1 sec is fine with 10 concurrent symbols
+    POLL_REFRESH_SEC = 1
 
     # ------------------------------------------------------------------
     # Defensive coercion — turns whatever the framework hands us into a
@@ -108,7 +109,7 @@ class CCXTProvider(Provider):
 
     def init(self):
         # Loud banner so any init-time crash is immediately attributable.
-        logging.info(f"[CCXT] init starting (exchange={getattr(Config, 'CCXT_EXCHANGE_ID', 'binance')})")
+        logging.info(f"[CCXT] init starting (exchange={getattr(Config, 'CCXT_EXCHANGE_ID', 'mexc')})")
         self._init_exchange()
         # Load markets once at boot so the first fetch_ohlcv doesn't pay
         # the cold-start cost (and so symbol validation works).
@@ -119,12 +120,14 @@ class CCXTProvider(Provider):
         logging.info(f"[CCXT] init complete (exchange={self.exchange.id})")
 
     def _init_exchange(self):
-        exchange_id = getattr(Config, "CCXT_EXCHANGE_ID", "binance")
+        exchange_id = (getattr(Config, "CCXT_EXCHANGE_ID", None) or "binance").strip().lower()
+        if not exchange_id:
+            exchange_id = "binance"
         api_key = getattr(Config, "CCXT_API_KEY", None) or ""
         api_secret = getattr(Config, "CCXT_API_SECRET", None) or ""
 
         if not hasattr(ccxt, exchange_id):
-            raise ValueError(f"CCXT does not support exchange: {exchange_id}")
+            raise ValueError(f"CCXT does not support exchange: {exchange_id!r}")
 
         exchange_cls = getattr(ccxt, exchange_id)
         self.exchange = exchange_cls({
@@ -134,7 +137,6 @@ class CCXTProvider(Provider):
             "options": {"defaultType": "spot"},
         })
         logging.info(f"CCXTProvider initialized with exchange: {exchange_id}")
-
     def get_dataset(self):
         if not hasattr(self, "exchange") or self.exchange is None:
             self._init_exchange()
