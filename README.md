@@ -54,6 +54,8 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - Reduced polling time from 10s to 1s (MEXC specific)
 ### Upd: 7
 - Now the polling works every second as intended
-> If you want to change value, in ccxt_provider.py change this value: POLL_REFRESH_SEC = 1 (to any other amount of seconds)
-- The price shows 2 digits after the dot (more precise)
+> If you want to change the value, in ccxt_provider.py change this value: POLL_REFRESH_SEC = 1 (to any other amount of seconds)
+- The price shows 2 digits after the dot (more precise) on Y axis
 - Chart shows real time price updates
+## Upd: 8
+- Added webhook support for the alerts and refined it

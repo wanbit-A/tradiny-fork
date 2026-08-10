@@ -28,6 +28,7 @@ import textTmpl from "./templates/text.html";
 import saveTmpl from "./templates/save.html";
 
 import alertRuleTmpl from "./templates/alert-rule.html";
+import alertsListTmpl from "./templates/alerts-list.html";
 
 import promptTmpl from "./templates/prompt.html";
 
@@ -48,6 +49,7 @@ const templateCache = {
 
   alert: alertTmpl,
   "alert-rule": alertRuleTmpl,
+  "alerts-list": alertsListTmpl,
   prompt: promptTmpl,
 };
 

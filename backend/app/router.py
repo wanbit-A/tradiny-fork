@@ -21,7 +21,14 @@ from fastapi import Depends
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 
-from db import search_data_entities, get_metadata
+from db import (
+    search_data_entities,
+    get_metadata,
+    get_alerts_by_client_id,
+    update_alert_settings,
+    delete_alert,
+    get_alert_by_id,
+)
 from config import Config
 from openai_gpt import query, query_reply
 from alert import (
@@ -322,6 +329,103 @@ async def process_message(
             task = {"action": "new_alert", "settings": d}
             logging.info(f"Adding task {task['action']} to {alert_queue[0]}")
             trigger_alert_worker(alert_queue[0], task)
+
+        elif d.get("type") == "list_alerts":
+            client_id = d.get("client_id")
+            alerts = get_alerts_by_client_id(dbconn, client_id) if client_id else []
+
+            def alert_status(a):
+                now = datetime.now(timezone.utc)
+                if a["expire_date"] and a["expire_date"] < now:
+                    return "expired"
+                if a["next_tick"] == 0:
+                    return "triggered"  # matched last tick, cooling down
+                return "active"
+
+            await safe_send_message(
+                websocket,
+                json.dumps(
+                    {
+                        "type": "alerts_list",
+                        "alerts": [
+                            {
+                                "id": a["id"],
+                                "message": a["settings"].get("message"),
+                                "webhook_url": a["settings"].get("webhook_url"),
+                                "status": alert_status(a),
+                                "created_at": (
+                                    a["created_at"].isoformat()
+                                    if a["created_at"]
+                                    else None
+                                ),
+                                "notified_at": (
+                                    a["notified_at"].isoformat()
+                                    if a["notified_at"]
+                                    else None
+                                ),
+                                "expire_date": (
+                                    a["expire_date"].isoformat()
+                                    if a["expire_date"]
+                                    else None
+                                ),
+                            }
+                            for a in alerts
+                        ],
+                    }
+                ),
+            )
+
+        elif d.get("type") == "update_alert":
+            alert_id = d.get("id")
+            client_id = d.get("client_id")
+            existing = get_alert_by_id(dbconn, alert_id) if alert_id else None
+
+            # Only allow editing an alert that belongs to this browser client
+            if (
+                existing
+                and client_id
+                and existing["settings"].get("client_id") == client_id
+            ):
+                new_settings = dict(existing["settings"])
+                if "message" in d:
+                    new_settings["message"] = d["message"]
+                if "webhook_url" in d:
+                    new_settings["webhook_url"] = d["webhook_url"]
+                update_alert_settings(dbconn, alert_id, new_settings)
+                await safe_send_message(
+                    websocket,
+                    json.dumps({"type": "alert_updated", "id": alert_id}),
+                )
+            else:
+                await safe_send_message(
+                    websocket,
+                    json.dumps(
+                        {"type": "notification", "message": "Error: Alert not found"}
+                    ),
+                )
+
+        elif d.get("type") == "delete_alert":
+            alert_id = d.get("id")
+            client_id = d.get("client_id")
+            existing = get_alert_by_id(dbconn, alert_id) if alert_id else None
+
+            if (
+                existing
+                and client_id
+                and existing["settings"].get("client_id") == client_id
+            ):
+                delete_alert(dbconn, alert_id)
+                await safe_send_message(
+                    websocket,
+                    json.dumps({"type": "alert_deleted", "id": alert_id}),
+                )
+            else:
+                await safe_send_message(
+                    websocket,
+                    json.dumps(
+                        {"type": "notification", "message": "Error: Alert not found"}
+                    ),
+                )
 
         elif d.get("type") == "vapid_public_key":
             await safe_send_message(

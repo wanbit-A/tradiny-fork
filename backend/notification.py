@@ -13,9 +13,19 @@
 import logging
 from notifications.web_push import send_notification as send_push_notification
 from notifications.email import send_notification as send_email_notification
+from notifications.webhook import send_notification as send_webhook_notification
+from notifications.console import send_notification as send_console_notification
 
 
-def send_notification(subscription, message):
+def send_notification(subscription, message, webhook_url=None, context=None):
+    # Always log locally first - this has no external dependency (no push
+    # subscription, no SMTP creds, no webhook URL needed) so it's the
+    # baseline that always works, including in local dev.
+    try:
+        send_console_notification(message)
+    except Exception as e:
+        logging.error(f"Error while sending console notification: {e}")
+
     try:
         send_push_notification(subscription, message)
     except Exception as e:
@@ -25,3 +35,8 @@ def send_notification(subscription, message):
         send_email_notification(message)
     except Exception as e:
         logging.error(f"Error while sending email notification: {e}")
+
+    try:
+        send_webhook_notification(webhook_url, message, context)
+    except Exception as e:
+        logging.error(f"Error while sending webhook notification: {e}")

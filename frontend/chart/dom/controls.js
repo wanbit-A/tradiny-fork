@@ -696,7 +696,7 @@ export class DOMControlsHandler {
           const colorPicker = new ColorPicker(
             defaultColor,
             dEl.node(),
-            (c) => {},
+            (c) => { },
           );
         });
     });
@@ -964,7 +964,7 @@ export class DOMControlsHandler {
   }
 
   drawSelect() {
-    const drawPicker = new DrawPicker(this.domHandler, (tool) => {});
+    const drawPicker = new DrawPicker(this.domHandler, (tool) => { });
   }
 
   gridSelect() {
@@ -1130,12 +1130,97 @@ export class DOMControlsHandler {
       alert("All inputs are required!");
       return;
     }
+    const webhookUrl = this.chart.d3ContainerEl
+      .select("input.alert-webhook-url")
+      .property("value")
+      .trim();
     const alertObj = this.serializeRules(this.domAlert);
     if (alertObj) {
       alertObj.message = message;
+      if (webhookUrl) {
+        alertObj.webhook_url = webhookUrl;
+      }
       this.chart.dataProvider.addAlert(alertObj);
       this._win.closePopup();
     }
+  }
+
+  openAlerts() {
+    new Renderer().render("alerts-list", { self: this }, (content) => {
+      this._alertsWin = new PopupWindow(this.chart.elementId, "auto");
+      this._alertsWin.render(content);
+      this.refreshAlertsList();
+    });
+  }
+
+  refreshAlertsList() {
+    const listEl = this.chart.d3ContainerEl.select(".alerts-list-body");
+    listEl.html('<div class="alerts-list-loading">Loading...</div>');
+
+    this.chart.dataProvider.listAlerts((alerts) => {
+      listEl.html("");
+
+      if (!alerts || alerts.length === 0) {
+        listEl.html('<div class="alerts-list-empty">No alerts yet.</div>');
+        return;
+      }
+
+      for (const a of alerts) {
+        const itemEl = listEl.append("div").attr("class", "alert-item");
+        itemEl
+          .append("div")
+          .attr("class", `alert-item-status alert-item-status-${a.status}`)
+          .text(a.status);
+        itemEl
+          .append("textarea")
+          .attr("class", "alert-item-message")
+          .attr("data-id", a.id)
+          .property("value", a.message || "");
+        itemEl
+          .append("input")
+          .attr("type", "text")
+          .attr("class", "alert-item-webhook")
+          .attr("data-id", a.id)
+          .attr("placeholder", "Webhook URL (optional)")
+          .property("value", a.webhook_url || "");
+
+        const actionsEl = itemEl.append("div").attr("class", "alert-item-actions");
+        actionsEl
+          .append("input")
+          .attr("type", "button")
+          .attr("value", "Save")
+          .on("click", () => this.saveAlertEdit(a.id));
+        actionsEl
+          .append("input")
+          .attr("type", "button")
+          .attr("value", "Delete")
+          .on("click", () => this.deleteAlertItem(a.id));
+      }
+    });
+  }
+
+  saveAlertEdit(id) {
+    const message = this.chart.d3ContainerEl
+      .select(`.alert-item-message[data-id="${id}"]`)
+      .property("value");
+    const webhookUrl = this.chart.d3ContainerEl
+      .select(`.alert-item-webhook[data-id="${id}"]`)
+      .property("value")
+      .trim();
+
+    this.chart.dataProvider.updateAlert(
+      id,
+      { message, webhook_url: webhookUrl },
+      () => {
+        // no-op: could show a saved indicator here
+      },
+    );
+  }
+
+  deleteAlertItem(id) {
+    this.chart.dataProvider.deleteAlert(id, () => {
+      this.refreshAlertsList();
+    });
   }
 
   optimizationEvents() {

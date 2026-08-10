@@ -45,7 +45,7 @@ def get_subscriptions():
     subscriptions = list(set(subscriptions))
 
     if len(subscriptions) > 0:
-       # logging.info(f"All subscriptions: {subscriptions}")
+       logging.info(f"All subscriptions: {subscriptions}")
 
     return subscriptions
 

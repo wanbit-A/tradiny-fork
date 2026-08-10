@@ -17,6 +17,27 @@ import { Utils } from "./utils.js";
 import { WebSocketManager } from "../ws.js";
 
 export class DataProvider {
+  // A stable per-browser identifier (independent of push-notification
+  // permission) used to let a user list/edit/delete their own alerts.
+  static getOrCreateClientId() {
+    const STORAGE_KEY = "tradiny_client_id";
+    try {
+      let clientId = window.localStorage.getItem(STORAGE_KEY);
+      if (!clientId) {
+        clientId =
+          (window.crypto && window.crypto.randomUUID)
+            ? window.crypto.randomUUID()
+            : `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        window.localStorage.setItem(STORAGE_KEY, clientId);
+      }
+      return clientId;
+    } catch (e) {
+      // localStorage unavailable (e.g. private mode) - fall back to a
+      // session-only id so alert management still works for this page load.
+      return `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+  }
+
   constructor(chart, config) {
     this.chart = chart;
     this.config = config;
@@ -37,6 +58,7 @@ export class DataProvider {
     this.interval = null;
     this.subscription = null;
     this.disable = false;
+    this.clientId = DataProvider.getOrCreateClientId();
     this._indicatorsOnDataInitAdded = false;
     this.indicatorsToAddOnDataInit = [];
 
@@ -322,8 +344,8 @@ export class DataProvider {
     const keys =
       data.length > 0
         ? Object.keys(data[0]).filter(
-            (k) => !["date", "_date", "_dateObj"].includes(k),
-          )
+          (k) => !["date", "_date", "_dateObj"].includes(k),
+        )
         : [];
 
     keys.forEach((key) => {
@@ -486,7 +508,30 @@ export class DataProvider {
     let d = JSON.parse(JSON.stringify(data));
     d.type = "alert";
     d.subscription = this.subscription;
+    d.client_id = this.clientId;
     this.ws.sendMessage(JSON.stringify([d]));
+  }
+
+  listAlerts(onAlertsList) {
+    this._onAlertsList = onAlertsList;
+    this.ws.sendMessage(
+      JSON.stringify([{ type: "list_alerts", client_id: this.clientId }]),
+    );
+  }
+
+  updateAlert(id, data, onAlertUpdated) {
+    this._onAlertUpdated = onAlertUpdated;
+    const d = { type: "update_alert", id, client_id: this.clientId, ...data };
+    this.ws.sendMessage(JSON.stringify([d]));
+  }
+
+  deleteAlert(id, onAlertDeleted) {
+    this._onAlertDeleted = onAlertDeleted;
+    this.ws.sendMessage(
+      JSON.stringify([
+        { type: "delete_alert", id, client_id: this.clientId },
+      ]),
+    );
   }
 
   addData(data, onData) {
@@ -824,6 +869,24 @@ export class DataProvider {
           break;
         case "notification":
           alert(message.message);
+          break;
+
+        case "alerts_list":
+          if (this._onAlertsList) {
+            this._onAlertsList(message.alerts);
+          }
+          break;
+
+        case "alert_updated":
+          if (this._onAlertUpdated) {
+            this._onAlertUpdated(message.id);
+          }
+          break;
+
+        case "alert_deleted":
+          if (this._onAlertDeleted) {
+            this._onAlertDeleted(message.id);
+          }
           break;
       }
 

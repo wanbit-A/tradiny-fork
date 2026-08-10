@@ -55,6 +55,16 @@ CONFIG_FIELDS = [
     ("SMTP_HOST", "smtp.gmail.com", "SMTP SSL hostname"),
     ("SMTP_PORT", "465", "SMTP SSL port"),
     (
+        "WEBHOOK_URL",
+        "",
+        "Default webhook URL for notifications (used if an alert doesn't set its own)",
+    ),
+    (
+        "DISABLE_CONSOLE_NOTIFICATIONS",
+        "0",
+        "Set to 1 to disable logging notifications to the console (useful outside of local dev)",
+    ),
+    (
         "RELEASE_HISTORICAL_CACHE_MINUTES",
         str(60 * 24),
         "Duration in minutes to retain the cache when not accessed by any user",

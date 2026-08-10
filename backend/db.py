@@ -314,6 +314,38 @@ def update_alert_notified_at(dbconn, alert_id, notified_at):
     dbconn.commit()
 
 
+def get_alerts_by_client_id(dbconn, client_id):
+    """Return all non-expired alerts that belong to a given browser client_id."""
+    create_tables(dbconn)
+
+    alerts = get_alerts(dbconn)
+    return [
+        a
+        for a in alerts
+        if a["settings"].get("client_id") and a["settings"].get("client_id") == client_id
+    ]
+
+
+def update_alert_settings(dbconn, alert_id, settings):
+    """Overwrite the settings JSON blob for an existing alert (used for editing from the frontend)."""
+    settings_str = json.dumps(settings)
+
+    cursor = dbconn.cursor()
+    cursor.execute(
+        "UPDATE alerts SET settings = ? WHERE id = ?",
+        (settings_str, alert_id),
+    )
+    dbconn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_alert(dbconn, alert_id):
+    cursor = dbconn.cursor()
+    cursor.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
+    dbconn.commit()
+    return cursor.rowcount > 0
+
+
 def table_exists(conn, table_name):
     """Check if a table exists in the database."""
     query = (
