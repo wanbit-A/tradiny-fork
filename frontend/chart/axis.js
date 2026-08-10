@@ -141,11 +141,13 @@ export class AxisHandler {
         this.chart.yAxes[i][yAxis.key].axis.tickFormat(fmt(yAxis.key));
       } else {
         const fmt = (key) => (d, i, a) => {
+          const prec = Math.max(this.chart.yAxesPrecision[key] || 0, 2);
           return Utils.formatFloat(
             this.chart.dataProvider.preciseMultiply(
               d,
               this.chart.yAxesDivision[key],
             ),
+            prec,
             this.chart.yAxesPrecision[key],
           );
         };

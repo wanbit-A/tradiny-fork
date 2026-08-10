@@ -123,19 +123,28 @@ class CCXTProvider(Provider):
         exchange_id = (getattr(Config, "CCXT_EXCHANGE_ID", None) or "binance").strip().lower()
         if not exchange_id:
             exchange_id = "binance"
-        api_key = getattr(Config, "CCXT_API_KEY", None) or ""
-        api_secret = getattr(Config, "CCXT_API_SECRET", None) or ""
+
+        api_key = (getattr(Config, "CCXT_API_KEY", None) or "").strip()
+        api_secret = (getattr(Config, "CCXT_API_SECRET", None) or "").strip()
 
         if not hasattr(ccxt, exchange_id):
             raise ValueError(f"CCXT does not support exchange: {exchange_id!r}")
 
-        exchange_cls = getattr(ccxt, exchange_id)
-        self.exchange = exchange_cls({
-            "apiKey": api_key,
-            "secret": api_secret,
+        params = {
             "enableRateLimit": True,
-            "options": {"defaultType": "spot"},
-        })
+            "options": {
+                "defaultType": "spot",
+                "adjustForTimeDifference": True,
+                "recvWindow": 60000,
+            },
+        }
+        # Only attach keys if both are real — empty strings still make CCXT sign
+        if api_key and api_secret:
+            params["apiKey"] = api_key
+            params["secret"] = api_secret
+
+        exchange_cls = getattr(ccxt, exchange_id)
+        self.exchange = exchange_cls(params)
         logging.info(f"CCXTProvider initialized with exchange: {exchange_id}")
     def get_dataset(self):
         if not hasattr(self, "exchange") or self.exchange is None:
@@ -324,15 +333,8 @@ class CCXTProvider(Provider):
         asyncio.run(watch())
 
     def _stream_with_polling(self, symbol, interval, timeframe):
-        """
-        Poll the exchange on a fixed cadence and push the latest tick.
-
-        `interval` (the candle size) is intentionally decoupled from the
-        poll cadence. We want the in-progress candle to refresh on a
-        human timescale (POLL_REFRESH_SEC) regardless of whether the
-        timeframe is 1m or 1M.
-        """
         last_ts = 0
+        last_ohlcv = None
         refresh = self.POLL_REFRESH_SEC
 
         while (symbol, interval) in CCXTProvider.streams:
@@ -340,14 +342,19 @@ class CCXTProvider(Provider):
                 ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=2)
                 if ohlcv:
                     latest = ohlcv[-1]
-                    if latest[0] > last_ts:
-                        last_ts = latest[0]
+                    ts = latest[0]
+                    values = (latest[1], latest[2], latest[3], latest[4], latest[5])
+                    if ts > last_ts or values != last_ohlcv:
+                        last_ts = ts
+                        last_ohlcv = values
+                        logging.info(
+                            f"[CCXT] push {symbol} {interval} close={values[3]}"
+                        )  # temporary — prove pushes happen
                         self._push_datapoint(symbol, interval, latest)
             except Exception as e:
                 logging.error(f"CCXT poll error for {symbol} {interval}: {e}")
 
             time.sleep(refresh)
-
     def _push_datapoint(self, symbol, interval, ohlcv_row):
         data = self.format_datapoint(symbol, interval, ohlcv_row)
 

@@ -129,7 +129,7 @@ export class Utils {
 
     // Calculate number of decimal places needed
     // Ensure that 'decimalPlaces' is sufficient for small numbers
-    let decimalPlaces = Math.max(0, -rangeMagnitude + 2);
+    let decimalPlaces = Math.max(2, -rangeMagnitude + 2);  // was Math.max(0, ...)
 
     // Use Number to ensure proper numeric type conversion
     const factor = Math.pow(10, decimalPlaces);

@@ -52,3 +52,8 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 ### Upd: 6
 - Changed hardcoded values of CCXT_EXCHANGE_ID to get from .env instead
 - Reduced polling time from 10s to 1s (MEXC specific)
+### Upd: 7
+- Now the polling works every second as intended
+> If you want to change value, in ccxt_provider.py change this value: POLL_REFRESH_SEC = 1 (to any other amount of seconds)
+- The price shows 2 digits after the dot (more precise)
+- Chart shows real time price updates
