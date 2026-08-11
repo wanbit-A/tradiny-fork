@@ -89,9 +89,10 @@ def build_context(alert, event, data_values=None, lastDataPoint=None):
 
 def alert_evaluate(dbconn, message, alert, data):
 
-    alert = get_alert_by_id(dbconn, alert["id"])
+    alert_id = alert["id"]
+    alert = get_alert_by_id(dbconn, alert_id)
     if alert is None:
-        logging.info(f"Alert no longer exists, closing subscription for alert_id={alert['id']}")
+        logging.info(f"Alert no longer exists, closing subscription for alert_id={alert_id}")
         create_task(data["websocket_client"].close())
         data["in_progress"] = False
         return
@@ -99,7 +100,11 @@ def alert_evaluate(dbconn, message, alert, data):
     alert_message = alert["settings"]["message"]
     now = datetime.now(timezone.utc)
 
-    if alert["expiry_notification_sent_at"] is None and alert["expire_date"] < now:
+    if (
+        alert["expire_date"] is not None
+        and alert["expiry_notification_sent_at"] is None
+        and alert["expire_date"] < now
+    ):
         update_expiry_notification(dbconn, alert["id"], now)
         send_notification(
             alert["settings"]["subscription"],
@@ -108,7 +113,7 @@ def alert_evaluate(dbconn, message, alert, data):
             build_context(alert, "expired"),
         )
 
-    if alert["expire_date"] < now:
+    if alert["expire_date"] is not None and alert["expire_date"] < now:
         create_task(data["websocket_client"].close())
         data["in_progress"] = False
         return

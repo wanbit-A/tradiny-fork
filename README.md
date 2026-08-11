@@ -61,3 +61,5 @@ Tradiny is a lightweight yet full-featured, highly-extensible, open-source chart
 - Added webhook support for the alerts and refined it
 ### Upd: 9
 - Added alert management through UI
+### Upd: 10
+- Improved alert management through UI & webhook alerts (for n8n workflow)

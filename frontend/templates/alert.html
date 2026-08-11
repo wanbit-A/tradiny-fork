@@ -13,6 +13,10 @@
         <label>Webhook URL (optional)</label>
         <input type="text" class="alert-webhook-url" placeholder="https://example.com/webhook">
       </div>
+      <div class="input-group" style="margin-bottom: 15px">
+        <label>Recurring</label>
+        <input type="checkbox" class="alert-recurring" style="flex: 0 0 auto; width: auto;">
+      </div>
       <div style="margin-bottom: 15px">
           <input type="button" onclick="{%=o.self.chart.id%}.DOMHandler.controls.addAlertRule()" value="Add condition">
       

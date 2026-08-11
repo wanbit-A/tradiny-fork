@@ -1134,12 +1134,16 @@ export class DOMControlsHandler {
       .select("input.alert-webhook-url")
       .property("value")
       .trim();
+    const recurring = this.chart.d3ContainerEl
+      .select("input.alert-recurring")
+      .property("checked");
     const alertObj = this.serializeRules(this.domAlert);
     if (alertObj) {
       alertObj.message = message;
       if (webhookUrl) {
         alertObj.webhook_url = webhookUrl;
       }
+      alertObj.recurring = recurring;
       this.chart.dataProvider.addAlert(alertObj);
       this._win.closePopup();
     }
@@ -1182,7 +1186,7 @@ export class DOMControlsHandler {
         }
 
         // Message field
-        const msgGroup = itemEl.append("div").attr("class", "alert-field");
+        const msgGroup = itemEl.append("div").attr("class", "input-group");
         msgGroup.append("label").text("Message");
         msgGroup
           .append("textarea")
@@ -1192,7 +1196,7 @@ export class DOMControlsHandler {
           .property("value", a.message || "");
 
         // Webhook field
-        const whGroup = itemEl.append("div").attr("class", "alert-field");
+        const whGroup = itemEl.append("div").attr("class", "input-group");
         whGroup.append("label").text("Webhook URL");
         whGroup
           .append("input")
@@ -1202,8 +1206,11 @@ export class DOMControlsHandler {
           .attr("placeholder", "https://example.com/webhook")
           .property("value", a.webhook_url || "");
 
-        // Actions
-        const actionsEl = itemEl.append("div").attr("class", "alert-item-actions");
+        // Actions - plain input[type=button], same as every other button in the app
+        const actionsEl = itemEl
+          .append("div")
+          .attr("class", "alert-item-actions")
+          .style("margin-bottom", "15px");
         actionsEl
           .append("input")
           .attr("type", "button")
@@ -1212,8 +1219,8 @@ export class DOMControlsHandler {
         actionsEl
           .append("input")
           .attr("type", "button")
-          .attr("class", "alert-btn-delete")
           .attr("value", "Delete")
+          .style("float", "right")
           .on("click", () => this.deleteAlertItem(a.id));
       }
     });

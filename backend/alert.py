@@ -80,9 +80,12 @@ async def process_queue(async_queue: asyncio.Queue, i: int):
             if action == "done":
                 break
             elif action == "new_alert":
-                expire_date = datetime.now(timezone.utc) + timedelta(
-                    minutes=int(Config.EXPIRE_ALERT_IN_MINUTES)
-                )
+                if task["settings"].get("recurring"):
+                    expire_date = None  # never expires
+                else:
+                    expire_date = datetime.now(timezone.utc) + timedelta(
+                        minutes=int(Config.EXPIRE_ALERT_IN_MINUTES)
+                    )
                 alert = db.add_alert(dbconn, task["settings"], expire_date)
                 asyncio.create_task(websocket_subscribe(async_queue, alert, i))
             elif action == "alert":

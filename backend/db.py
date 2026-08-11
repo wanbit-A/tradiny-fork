@@ -178,7 +178,7 @@ def get_alerts(dbconn):
 
     cursor = dbconn.cursor()
     cursor.execute(
-        "SELECT * FROM alerts WHERE datetime(expire_date) > datetime('now', 'utc')"
+        "SELECT * FROM alerts WHERE expire_date IS NULL OR datetime(expire_date) > datetime('now', 'utc')"
     )
     alerts = cursor.fetchall()
 
@@ -234,9 +234,10 @@ def add_alert(dbconn, settings, expire_date):
     create_tables(dbconn)  # make sure the table is existing
 
     settings_str = json.dumps(settings)
-    expire_date_str = expire_date.strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )  # convert datetime object to a string
+    # expire_date is None for recurring alerts (never expire)
+    expire_date_str = (
+        expire_date.strftime("%Y-%m-%d %H:%M:%S") if expire_date else None
+    )
 
     cursor = dbconn.cursor()
     cursor.execute(
