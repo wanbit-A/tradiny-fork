@@ -1,22 +1,15 @@
 # Tradiny (Fork)
+> This fork focuses on webhook alerts integration as a free alternative to TradingView's & TakeProfit's indicator-based alerts with webhooks
+- Essential for free indicator-based trading
+> Second part is the actual n8n workflow
+> Nothing more will be added, only the MVP
+## How to start backend (Linux (Mint))
+cd ~/tradiny-fork
+python3 -m venv venv
+> This is for activating v. env:
+source venv/bin/activate
 
-Tradiny is a lightweight yet full-featured, highly-extensible, open-source charting platform. Draw time-series data such as line charts or candlestick charts. 
-
-[<a href="https://tradiny.com" target="_blank">Website</a>](https://tradiny.com) |
-[<a href="https://docs.tradiny.com/" target="_blank">Documentation</a>](https://docs.tradiny.com/) |
-[<a href="https://demo.tradiny.com" target="_blank">Demo</a>](https://demo.tradiny.com)
-
-## Features
-
-- **Annotation Tools**: Lines and curves, ruler, Fibonacci tool.
-- **Great User Experience**: Pan and zoom, autoscale, save charts, etc.
-- **Themes**: Dark, white, custom, etc.
-- **Data Sources**: CSV, finance — stocks 32k, options 1.5M, indices 11k, forex 1.7k, crypto 1k (Polygon.io and Binance).
-> Added CCXT support
-- **Statistical and Finance Indicators**: 160+ indicators.
-- **Advanced Alerting**: Cross-asset, cross time-frame real-time zero-delay alerting.
-- **Market Scanner**: Scan for real-time data and assets matching user-defined rules and export to CSV.
-- **ChatGPT Integration**: Analyze and interpret charts with ChatGPT.
+And then go here: https://docs.tradiny.com/dev/build/
 
 # Updates by wanbit-A
 ## Upd: 1
