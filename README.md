@@ -4,10 +4,10 @@
 > Second part is the actual n8n workflow
 > Nothing more will be added, only the MVP
 ## How to start backend (Linux (Mint))
-cd ~/tradiny-fork
-python3 -m venv venv
+- cd ~/tradiny-fork
+- python3 -m venv venv
 > This is for activating v. env:
-source venv/bin/activate
+- source venv/bin/activate
 
 And then go here: https://docs.tradiny.com/dev/build/
 
