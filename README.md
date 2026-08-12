@@ -11,6 +11,15 @@
 
 And then go here: https://docs.tradiny.com/dev/build/
 
+## How to start frontend (Linux (Mint))
+> Install & Use Node 20 (that supports canvas)
+- nvm install 20
+- nvm use 20
+> Clean up previous failed attempts
+- rm -rf node_modules package-lock.json
+
+And then go here: https://docs.tradiny.com/dev/build/
+
 # Updates by wanbit-A
 ## Upd: 1
 > Portainer port:8000 conflict
