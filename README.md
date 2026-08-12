@@ -65,3 +65,9 @@ And then go here: https://docs.tradiny.com/dev/build/
 - Added alert management through UI
 ### Upd: 10
 - Improved alert management through UI & webhook alerts (for n8n workflow)
+#### Upd: 11
+- Tweaked README (added running guide)
+#### Upd: 12
+- Added run.sh script for automating running Tradiny in local development environment
+> Docker is messy from the Tradiny itself, it will create bunch of images and bloat your storage, though I don't know why
+> I do not suggest to host this Tradiny fork in docker
