@@ -12,13 +12,14 @@ PID1=$!
 echo "Starting Frontend..."
 (
   cd ~/tradiny-fork/frontend || exit 1
-  npm run build && npm start
+  npm start
 ) &
 PID2=$!
 
 # Trap Ctrl+C (INT) and kill (TERM) to stop both background processes cleanly
 trap 'echo -e "\nStopping apps..."; kill $PID1 $PID2' INT TERM
 
+# npm run build &&
 # Keep the script running in the foreground so you can see the logs
 # and interrupt it with Ctrl+C when you are done.
 wait
