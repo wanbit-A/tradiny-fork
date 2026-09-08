@@ -1,10 +1,11 @@
 import logging
-import re
 import ccxt
+import ccxt.pro as ccxtpro
 from datetime import datetime, timedelta, timezone
 import threading
 import json
 import time
+import asyncio
 
 from provider import Provider
 from config import Config
@@ -146,6 +147,29 @@ class CCXTProvider(Provider):
         exchange_cls = getattr(ccxt, exchange_id)
         self.exchange = exchange_cls(params)
         logging.info(f"CCXTProvider initialized with exchange: {exchange_id}")
+
+        # Live websocket client (CCXT Pro). History stays on REST self.exchange.
+        ws_cls = getattr(ccxtpro, exchange_id, None)
+        if ws_cls is None:
+            self.ws_exchange = None
+            logging.warning(
+                f"[CCXT] no ccxt.pro class for {exchange_id!r}; "
+                f"websocket streaming disabled"
+            )
+        else:
+            ws_params = {
+                "enableRateLimit": True,
+                "options": {
+                    "defaultType": "spot",
+                    "adjustForTimeDifference": True,
+                    "recvWindow": 60000,
+                },
+            }
+            if api_key and api_secret:
+                ws_params["apiKey"] = api_key
+                ws_params["secret"] = api_secret
+            self.ws_exchange = ws_cls(ws_params)
+            logging.info(f"[CCXT] Pro WS client ready for {exchange_id}")
     def get_dataset(self):
         if not hasattr(self, "exchange") or self.exchange is None:
             self._init_exchange()
@@ -187,15 +211,20 @@ class CCXTProvider(Provider):
 
     def format_datapoint(self, symbol, interval, k):
         ts_ms = k[0]
-        date_str = datetime.fromtimestamp(ts_ms / 1000, timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+
+        date_str = datetime.fromtimestamp(
+            ts_ms / 1000,
+            timezone.utc,
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
         return {
             "date": date_str,
-            f"{self.key}-{symbol}-{interval}-open":   k[1],
-            f"{self.key}-{symbol}-{interval}-high":   k[2],
-            f"{self.key}-{symbol}-{interval}-low":    k[3],
-            f"{self.key}-{symbol}-{interval}-close":  k[4],
+            "timestamp": ts_ms,
+
+            f"{self.key}-{symbol}-{interval}-open": k[1],
+            f"{self.key}-{symbol}-{interval}-high": k[2],
+            f"{self.key}-{symbol}-{interval}-low": k[3],
+            f"{self.key}-{symbol}-{interval}-close": k[4],
             f"{self.key}-{symbol}-{interval}-volume": k[5],
         }
 
@@ -268,7 +297,6 @@ class CCXTProvider(Provider):
             if ws_client is not None:
                 CCXTProvider.ws_clients[(symbol, interval)].append(ws_client)
                 self._start_ccxt_stream(symbol, interval)
-
     def _start_ccxt_stream(self, symbol, interval):
         if (symbol, interval) in CCXTProvider.streams:
             return
@@ -277,93 +305,317 @@ class CCXTProvider(Provider):
         exchange = self.exchange
 
         def stream_loop():
-            logging.info(f"Starting CCXT stream for {symbol} {interval}")
-            CCXTProvider.streams_started_at[(symbol, interval)] = datetime.now(timezone.utc)
+            logging.info(
+                f"[CCXT] Starting stream for {symbol} {interval} "
+                f"using exchange={exchange.id}"
+            )
+            CCXTProvider.streams_started_at[(symbol, interval)] = (
+                datetime.now(timezone.utc)
+            )
 
-            # Try CCXT Pro first. hasattr is unreliable (binance advertises
-            # watch_ohlcv but raises NotSupported at runtime), so the
-            # only honest check is "try once, catch NotSupported".
-            try:
-                if hasattr(exchange, "watch_ohlcv"):
+            used_ws = False
+            if getattr(self, "ws_exchange", None) is not None:
+                try:
+                    logging.info(
+                        f"[CCXT] Trying CCXT Pro watch_ohlcv for "
+                        f"{symbol} {interval}"
+                    )
                     self._stream_with_ccxt_pro(symbol, interval, timeframe)
-                    return
-            except ccxt.NotSupported as e:
-                logging.info(
-                    f"[CCXT] {exchange.id} doesn't support watch_ohlcv ({e}); "
-                    f"falling back to polling for {symbol} {interval}."
-                )
-            except Exception as e:
-                logging.warning(
-                    f"[CCXT] watch_ohlcv probe failed for {exchange.id} "
-                    f"{symbol} {interval}: {e}; falling back to polling."
-                )
+                    used_ws = True
+                except ccxt.NotSupported as e:
+                    logging.info(
+                        f"[CCXT] watch_ohlcv not supported ({e}); "
+                        f"falling back to REST polling"
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"[CCXT] watch_ohlcv failed "
+                        f"({type(e).__name__}: {e}); "
+                        f"falling back to REST polling"
+                    )
 
-            self._stream_with_polling(symbol, interval, timeframe)
+            if not used_ws and (symbol, interval) in CCXTProvider.streams:
+                logging.info(
+                    f"[CCXT] Starting REST polling for "
+                    f"{symbol} {interval} "
+                    f"refresh={self.POLL_REFRESH_SEC}s"
+                )
+                self._stream_with_polling(symbol, interval, timeframe)
 
         thread = threading.Thread(target=stream_loop, daemon=True)
         CCXTProvider.streams[(symbol, interval)] = thread
         thread.start()
 
     def _stream_with_ccxt_pro(self, symbol, interval, timeframe):
-        """Stream using CCXT Pro's watch_ohlcv.
-
-        Raises ccxt.NotSupported so the caller can fall back to polling.
-        Other exceptions are logged and retried.
         """
-        import asyncio
+        Live stream via CCXT Pro watch_ohlcv.
+
+        Important: the Pro exchange instance must be created inside the
+        asyncio loop that will use it. A shared self.ws_exchange created
+        at init lives on a different loop and causes:
+          RuntimeError: Future attached to a different loop
+        """
+        exchange_id = self.exchange.id
 
         async def watch():
-            while (symbol, interval) in CCXTProvider.streams:
+            # Fresh client bound to THIS loop (this thread).
+            ws = getattr(ccxtpro, exchange_id)({
+                "enableRateLimit": True,
+                "options": {
+                    "defaultType": "spot",
+                    "adjustForTimeDifference": True,
+                    "recvWindow": 60000,
+                },
+            })
+
+            last_live_ts = None
+            last_live_values = None
+            last_closed_ts = None
+            prev_row = None
+            consecutive_errors = 0
+
+            logging.info(
+                f"[CCXT] WS LOOP ENTERED {symbol} {interval} "
+                f"timeframe={timeframe}"
+            )
+
+            try:
+                while (symbol, interval) in CCXTProvider.streams:
+                    try:
+                        ohlcv = await ws.watch_ohlcv(symbol, timeframe)
+                        consecutive_errors = 0
+
+                        if not ohlcv:
+                            continue
+
+                        row = ohlcv[-1]
+                        ts = row[0]
+                        values = (row[1], row[2], row[3], row[4], row[5])
+
+                        # CLOSED when candle timestamp advances
+                        if last_live_ts is not None and ts > last_live_ts:
+                            closed_row = prev_row
+                            if closed_row is not None:
+                                closed_ts = closed_row[0]
+                                if (
+                                    last_closed_ts is None
+                                    or closed_ts > last_closed_ts
+                                ):
+                                    last_closed_ts = closed_ts
+                                    logging.info(
+                                        f"[CCXT] CLOSED {symbol} {interval} "
+                                        f"ts={closed_ts} "
+                                        f"O={closed_row[1]} "
+                                        f"H={closed_row[2]} "
+                                        f"L={closed_row[3]} "
+                                        f"C={closed_row[4]} "
+                                        f"V={closed_row[5]}"
+                                    )
+                                    self._push_datapoint(
+                                        symbol,
+                                        interval,
+                                        closed_row,
+                                        event_type="candle_close",
+                                        closed=True,
+                                    )
+
+                        # LIVE forming candle
+                        if (
+                            ts != last_live_ts
+                            or values != last_live_values
+                        ):
+                            last_live_ts = ts
+                            last_live_values = values
+                            prev_row = row
+
+                            logging.debug(
+                                f"[CCXT] LIVE {symbol} {interval} "
+                                f"ts={ts} "
+                                f"O={row[1]} H={row[2]} L={row[3]} "
+                                f"C={row[4]} V={row[5]}"
+                            )
+                            self._push_datapoint(
+                                symbol,
+                                interval,
+                                row,
+                                event_type="data_update",
+                                closed=False,
+                            )
+
+                    except ccxt.NotSupported:
+                        raise
+                    except Exception as e:
+                        consecutive_errors += 1
+                        logging.exception(
+                            f"[CCXT] WS error {symbol} {interval}: {e}"
+                        )
+                        # After a few loop-binding / fatal failures, bail out
+                        # so stream_loop can fall back to REST polling.
+                        if consecutive_errors >= 3:
+                            raise
+                        await asyncio.sleep(2)
+
+            finally:
                 try:
-                    ohlcv = await self.exchange.watch_ohlcv(symbol, timeframe)
-                    if ohlcv:
-                        # CCXT may return a partial or full candle list;
-                        # the last entry is the latest tick.
-                        for row in ohlcv[-1:]:
-                            self._push_datapoint(symbol, interval, row)
-                except ccxt.NotSupported:
-                    # Bubble up so the caller switches to polling.
-                    raise
-                except Exception as e:
-                    logging.error(
-                        f"CCXT Pro watch error for {symbol} {interval}: {e}"
-                    )
-                    await asyncio.sleep(5)
+                    await ws.close()
+                except Exception:
+                    pass
 
         asyncio.run(watch())
 
     def _stream_with_polling(self, symbol, interval, timeframe):
-        last_ts = 0
-        last_ohlcv = None
+        """
+        REST polling fallback (Phase 1.5 semantics).
+        """
+        last_live_ts = None
+        last_live_values = None
+        last_closed_ts = None
+
         refresh = self.POLL_REFRESH_SEC
+        tf_ms = self.exchange.parse_timeframe(timeframe) * 1000
+
+        logging.info(
+            f"[CCXT] POLLING LOOP ENTERED "
+            f"{symbol} {interval} timeframe={timeframe}"
+        )
 
         while (symbol, interval) in CCXTProvider.streams:
             try:
-                ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=2)
-                if ohlcv:
-                    latest = ohlcv[-1]
-                    ts = latest[0]
-                    values = (latest[1], latest[2], latest[3], latest[4], latest[5])
-                    if ts > last_ts or values != last_ohlcv:
-                        last_ts = ts
-                        last_ohlcv = values
-                        logging.info(
-                            f"[CCXT] push {symbol} {interval} close={values[3]}"
-                        )  # temporary — prove pushes happen
-                        self._push_datapoint(symbol, interval, latest)
-            except Exception as e:
-                logging.error(f"CCXT poll error for {symbol} {interval}: {e}")
+                logging.debug(
+                    f"[CCXT] polling fetch START {symbol} {interval}"
+                )
 
-            time.sleep(refresh)
-    def _push_datapoint(self, symbol, interval, ohlcv_row):
-        data = self.format_datapoint(symbol, interval, ohlcv_row)
+                fetch_started = time.time()
+                ohlcv = self.exchange.fetch_ohlcv(
+                    symbol,
+                    timeframe,
+                    limit=5,
+                )
+                fetch_elapsed = time.time() - fetch_started
+
+                logging.debug(
+                    f"[CCXT] polling fetch DONE {symbol} {interval} "
+                    f"rows={len(ohlcv) if ohlcv else 0} "
+                    f"elapsed={fetch_elapsed:.3f}s"
+                )
+
+                if not ohlcv or len(ohlcv) < 2:
+                    logging.warning(
+                        f"[CCXT] polling returned insufficient OHLCV "
+                        f"for {symbol} {interval}: "
+                        f"{len(ohlcv) if ohlcv else 0} rows"
+                    )
+                    time.sleep(refresh)
+                    continue
+
+                live_candle = ohlcv[-1]
+                live_ts = live_candle[0]
+                finished = ohlcv[:-1]
+
+                if last_closed_ts is None:
+                    last_closed_ts = finished[-1][0]
+                    logging.info(
+                        f"[CCXT] polling initialized "
+                        f"{symbol} {interval} "
+                        f"closed_ts={last_closed_ts}"
+                    )
+                else:
+                    for row in finished:
+                        row_ts = row[0]
+                        if row_ts <= last_closed_ts:
+                            continue
+
+                        last_closed_ts = row_ts
+                        logging.info(
+                            f"[CCXT] CLOSED {symbol} {interval} "
+                            f"ts={row_ts} "
+                            f"O={row[1]} H={row[2]} L={row[3]} "
+                            f"C={row[4]} V={row[5]}"
+                        )
+                        self._push_datapoint(
+                            symbol,
+                            interval,
+                            row,
+                            event_type="candle_close",
+                            closed=True,
+                        )
+
+                live_values = (
+                    live_candle[1],
+                    live_candle[2],
+                    live_candle[3],
+                    live_candle[4],
+                    live_candle[5],
+                )
+
+                if (
+                    live_ts != last_live_ts
+                    or live_values != last_live_values
+                ):
+                    last_live_ts = live_ts
+                    last_live_values = live_values
+
+                    logging.info(
+                        f"[CCXT] LIVE {symbol} {interval} "
+                        f"ts={live_ts} "
+                        f"O={live_candle[1]} "
+                        f"H={live_candle[2]} "
+                        f"L={live_candle[3]} "
+                        f"C={live_candle[4]} "
+                        f"V={live_candle[5]}"
+                    )
+                    self._push_datapoint(
+                        symbol,
+                        interval,
+                        live_candle,
+                        event_type="data_update",
+                        closed=False,
+                    )
+
+                now_ms = self.exchange.milliseconds()
+                close_at = live_ts + tf_ms
+                ms_to_close = close_at - now_ms
+
+                if 0 < ms_to_close <= 3000:
+                    sleep_s = 0.5
+                elif ms_to_close > 3000:
+                    sleep_s = min(
+                        refresh,
+                        max(0.5, (ms_to_close / 1000.0) - 1.0),
+                    )
+                else:
+                    sleep_s = 0.5
+
+                time.sleep(sleep_s)
+
+            except Exception as e:
+                logging.exception(
+                    f"[CCXT] polling ERROR {symbol} {interval}: {e}"
+                )
+                time.sleep(refresh)
+
+    def _push_datapoint(self,symbol,interval,ohlcv_row,event_type="data_update",closed=False,):
+        data = self.format_datapoint(
+            symbol,
+            interval,
+            ohlcv_row,
+        )
 
         self.respond({
             "action": "update_in_cache",
-            "args": (self.key, symbol, interval, [data]),
+            "args": (
+                self.key,
+                symbol,
+                interval,
+                [data],
+            ),
         })
 
-        ws_clients = CCXTProvider.ws_clients.get((symbol, interval), [])
+        ws_clients = CCXTProvider.ws_clients.get(
+            (symbol, interval),
+            [],
+        )
+
         if len(ws_clients) > 0:
             self.respond({
                 "action": "write_message",
@@ -372,10 +624,11 @@ class CCXTProvider(Provider):
                 "name": symbol,
                 "interval": interval,
                 "args": [json.dumps({
-                    "type": "data_update",
+                    "type": event_type,
                     "source": self.key,
                     "name": symbol,
                     "interval": interval,
+                    "closed": closed,
                     "data": data,
                 })],
             })

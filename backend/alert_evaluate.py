@@ -118,7 +118,7 @@ def alert_evaluate(dbconn, message, alert, data):
         data["in_progress"] = False
         return
 
-    lastDataPoint = data["lastDataPoint"] if "lastDataPoint" in data else {}
+        lastDataPoint = data["lastDataPoint"] if "lastDataPoint" in data else {}
 
     if alert["added_notification_sent_at"] is None and not lastDataPoint:
         update_added_notification(dbconn, alert["id"], now)
@@ -129,15 +129,52 @@ def alert_evaluate(dbconn, message, alert, data):
             build_context(alert, "added"),
         )
 
+    # Default: evaluate only on confirmed candle close.
+    # Set alert settings "evaluate_on": "intrabar" to allow live ticks.
+    evaluate_on = (alert["settings"].get("evaluate_on") or "close").lower()
+
+    should_evaluate = False
+
     if message["type"] == "data_init":
         lastDataPoint.update(message["data"][-1])
+        # Initial snapshot is not a close event.
+        should_evaluate = evaluate_on == "intrabar"
+
     elif message["type"] == "indicator_init":
         lastDataPoint.update(message["data"][-1])
+        should_evaluate = evaluate_on == "intrabar"
+
     elif message["type"] == "data_update":
+        # Live / forming candle.
         lastDataPoint.update(message["data"])
+        should_evaluate = evaluate_on == "intrabar"
+
+    elif message["type"] == "candle_close":
+        # Confirmed / finalized candle.
+        lastDataPoint.update(message["data"])
+        logging.info(
+            f"Alert {alert['id']}: received CLOSED candle "
+            f"from {message.get('source')} "
+            f"{message.get('name')} "
+            f"{message.get('interval')}"
+        )
+        # Close-mode and intrabar-mode both evaluate on close.
+        should_evaluate = True
+
     elif message["type"] == "indicator_update":
         lastDataPoint.update(message["data"])
+        # Indicator updates ride the same cadence as the candle event
+        # that triggered them; only evaluate if we are in intrabar mode
+        # or if the message itself is from a close path (closed flag).
+        should_evaluate = (
+            evaluate_on == "intrabar"
+            or message.get("closed") is True
+        )
+
     data["lastDataPoint"] = lastDataPoint
+
+    if not should_evaluate:
+        return
 
     rules = alert["settings"]["rules"]
     operators = alert["settings"]["operators"]
@@ -145,7 +182,10 @@ def alert_evaluate(dbconn, message, alert, data):
 
     rules_result = rules_evaluate(rules, operators, indicators, lastDataPoint)
     if rules_result is None:
-        logging.debug(f"Alert {alert['id']}: rules_evaluate returned None (data not ready yet)")
+        logging.debug(
+            f"Alert {alert['id']}: rules_evaluate returned None "
+            f"(data not ready yet)"
+        )
         return
     result, data_values = rules_result
 
