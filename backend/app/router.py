@@ -43,7 +43,7 @@ from scanner import (
 from security import register_request, is_request_allowed, is_ip_address_whitelisted
 
 from .connection import safe_send_message, conn
-from .globals import dbconn, providers, indicator_fetcher
+from .globals import dbconn, providers, indicator_fetcher, clients
 from .handlers import (
     send_historical_data,
     optimize_indicator_params,
@@ -237,6 +237,45 @@ async def process_message(
                     }
                 )
 
+        elif d.get("type") == "switch_ticker":
+            source = d.get("source", "CCXT")
+            interval = d.get("interval", "1h")
+            old_name = d.get("old_name")
+            new_name = d.get("new_name")
+
+            if not old_name or not new_name:
+                return
+
+            client_key = id(websocket)
+
+            if client_key in clients:
+                client = clients[client_key]
+
+                old_key = (source, old_name, interval)
+                if old_key in client["subscriptions"]["data"]:
+                    client["subscriptions"]["data"].remove(old_key)
+
+                new_key = (source, new_name, interval)
+                if new_key not in client["subscriptions"]["data"]:
+                    client["subscriptions"]["data"].append(new_key)
+
+                for ind in client["subscriptions"]["indicators"]:
+                    if "dataMap" in ind:
+                        for k, v in ind["dataMap"].items():
+                            if v.get("name") == old_name and v.get("source") == source:
+                                v["name"] = new_name
+
+                                if v.get("value") and old_name in str(v["value"]):
+                                    v["value"] = v["value"].replace(old_name, new_name)
+
+            # Stop old stream only.
+            # The frontend immediately re-sends the data subscription,
+            # which starts the new stream through the normal path.
+            if old_name:
+                providers[source].request({
+                    "action": "on_close",
+                    "args": (client_key, old_name, interval)
+                })
         elif (
             d.get("type") == "data_history"
             and d.get("name")

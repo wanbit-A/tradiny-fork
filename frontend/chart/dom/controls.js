@@ -530,11 +530,20 @@ export class DOMControlsHandler {
   }
 
   addData() {
-    this._win.closePopup();
-
     const i = parseInt(
       this.chart.d3ContainerEl.select("select.pane-select").node().value,
     );
+
+    // Check if this should replace the current ticker in the target pane
+    const handled = this.chart.dataProvider.selectDataForPane(this._data, i);
+    if (handled) {
+      this._win.closePopup();
+      this._data = undefined;
+      return;
+    }
+
+    // Normal add flow (for empty panes or indicator-only panes)
+    this._win.closePopup();
     const axesMap = {};
     this.chart.d3ContainerEl
       .selectAll("select.axes-list")
@@ -543,7 +552,6 @@ export class DOMControlsHandler {
         const value = d3.select(this).node().value;
         axesMap[key] = value;
       });
-
     const scalesMap = {};
     this.chart.d3ContainerEl
       .selectAll("select.scales-list")
@@ -552,14 +560,12 @@ export class DOMControlsHandler {
         const value = d3.select(this).node().value;
         scalesMap[key] = value;
       });
-
     const colorMap = {};
     this.chart.d3ContainerEl.selectAll("div.color-list").each(function (d, i) {
       const key = d3.select(this).attr("data-key");
       const value = d3.select(this).attr("data-value");
       colorMap[key] = value;
     });
-
     this.chart.operationsHandler.addData(
       this._data,
       i,

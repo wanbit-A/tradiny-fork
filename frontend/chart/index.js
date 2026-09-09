@@ -479,4 +479,13 @@ export default class TradinyChart {
     })(navigator.userAgent || navigator.vendor || window.opera);
     return check;
   }
+  switchTicker(newName) {
+    const currentData = this.dataProvider.config.data.find(
+      (d) => d.type === "data"
+    );
+
+    if (!currentData || currentData.name === newName) return;
+
+    this.dataProvider.switchTicker(currentData.name, newName);
+  }
 }

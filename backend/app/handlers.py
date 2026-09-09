@@ -305,32 +305,39 @@ def send_indicator_data(
                 cached_data["cached_df"].index[-1].to_pydatetime()
             )  # datetime.strptime(range[1], "%Y-%m-%d %H:%M:%S")
 
-            # abs_difference = np.abs(cached_data['cached_df'].index.to_pydatetime() - f)
-            # index_from = np.argmin(abs_difference)
-            # index_from -= (length * 2)
-            # if index_from < 0: index_from = 0
             index_from = 0
-
-            abs_difference = np.abs(cached_data["cached_df"].index.to_pydatetime() - t)
-            index_to = np.argmin(abs_difference)
-
-            idf = cached_data["cached_df"].iloc[index_from : index_to + 1]
-            idf = pd.DataFrame(
-                [[index, float(row[column])] for index, row in idf.iterrows()]
+            abs_difference = np.abs(
+                cached_data["cached_df"].index.to_pydatetime() - t
             )
+            index_to = np.argmin(abs_difference)
+            idf = cached_data["cached_df"].iloc[index_from : index_to + 1]
+
+            records = []
+            for index, row in idf.iterrows():
+                if column in row and pd.notna(row[column]):
+                    records.append([index, float(row[column])])
+
+            if not records:
+                return json.dumps({"type": "no_data", "id": id})
+
+            idf = pd.DataFrame(records)
 
         elif count:
-            # idf = pd.DataFrame(
-            #     [[index, float(row[column])] for index, row in cached_data['cached_df'].tail(count + (length*2)).iterrows()]
-            # )
-            idf = pd.DataFrame(
-                [
-                    [index, float(row[column])]
-                    for index, row in cached_data["cached_df"].iterrows()
-                ]
-            )
+            tail_count = int(count) + (int(length) * 2)
+            cached_slice = cached_data["cached_df"].tail(tail_count)
+
+            records = []
+            for index, row in cached_slice.iterrows():
+                if column in row and pd.notna(row[column]):
+                    records.append([index, float(row[column])])
+
+            if not records:
+                return json.dumps({"type": "no_data", "id": id})
+
+            idf = pd.DataFrame(records)
+
         else:
-            logging.error(f"Error: range nor count found in your request")
+            logging.error("Error: range nor count found in your request")
             continue
         idf.columns = ["Date", column]
         if df.empty:

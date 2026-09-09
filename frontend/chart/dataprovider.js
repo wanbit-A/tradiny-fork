@@ -61,6 +61,10 @@ export class DataProvider {
     this.clientId = DataProvider.getOrCreateClientId();
     this._indicatorsOnDataInitAdded = false;
     this.indicatorsToAddOnDataInit = [];
+    this._tickerRename = null;
+    this._switchingTicker = false;
+    this._renderPrefix = null;
+    this._displayName = null;
 
     if (config && config.data) {
       // extract interval
@@ -446,7 +450,13 @@ export class DataProvider {
     }
 
     // Otherwise, adopt the bucket implied by current data
-    return Math.pow(10, newAnchor);
+    const divider = Math.pow(10, newAnchor);
+
+    // The divider exists to scale LARGE values down below the 16-bit limit.
+    // Small values (< 1) must never be scaled UP: a divider of 0.1 turns
+    // a 0..1 series (e.g. SQZ_ON/SQZ_OFF) into 0..10 on the Y axis.
+    // Clamp to >= 1 so we only ever shrink, never inflate.
+    return divider < 1 ? 1 : divider;
   }
 
   oldDetermineDivider(maxValue, minValue) {
@@ -547,13 +557,25 @@ export class DataProvider {
   }
 
   addIndicator(data, onData) {
-    // new data
-    this._onIndicatorData[data.id] = onData;
+  // new data
+  this._onIndicatorData[data.id] = onData;
 
+  // Prevent duplicate indicator entries after ticker switching
+  const exists = this.config.data.some(
+    (d) => d.type === "indicator" && d.id === data.id
+  );
+
+  if (!exists) {
     this.config.data.push(data);
-    let d = JSON.parse(JSON.stringify(data));
+  }
+
+  let d = JSON.parse(JSON.stringify(data));
+
+  if (this.data && this.data.length > 0) {
     d.range = [this.data[0]._date, this.data[this.data.length - 1]._date];
-    this.ws.sendMessage(JSON.stringify([d]));
+  }
+
+  this.ws.sendMessage(JSON.stringify([d]));
   }
 
   addIndicatorsOnDataInit() {
@@ -615,6 +637,7 @@ export class DataProvider {
             }
           }
 
+          message.data = this._remapActiveTickerKeys(message.data);
           obj = this.prepareData(message.data);
 
           this.updated(
@@ -727,6 +750,7 @@ export class DataProvider {
             // ⬇️ The line that was crashing you
             // this.chart.addWindow();   ← DELETE THIS LINE
             console.error("No data for", message.source, message.name, message.interval);
+            this._switchingTicker = false;
           }
 
           if (message.data.length > 0) {
@@ -748,6 +772,7 @@ export class DataProvider {
                 ),
               };
             }
+            message.data = this._remapActiveTickerKeys(message.data);
             obj = this.prepareData(message.data);
 
             cbKey = `${message["source"]}-${message["name"]}-data`;
@@ -759,7 +784,25 @@ export class DataProvider {
               cb();
             }
 
-            if (!wasNotReady) {
+            if (this._switchingTicker) {
+              this._switchingTicker = false;
+
+              if (this.chart && this.chart.cacheHandler) {
+                this.chart.cacheHandler.buildCaches();
+              }
+
+              this.updated(
+                obj.keysUpdated,
+                undefined,
+                1,
+                obj.shift,
+                true,
+              );
+
+              if (this.chart && this.chart.renderHandler) {
+                this.chart.renderHandler.render();
+              }
+            } else if (!wasNotReady) {
               this.updated(
                 obj.keysUpdated,
                 obj.newIndexesAdded,
@@ -779,6 +822,12 @@ export class DataProvider {
 
         case "data_update":
         case "indicator_update":
+          if (this._switchingTicker) {
+            return;
+          }
+
+          message.data = this._remapActiveTickerKeys(message.data);
+
           if (!this.data) {
             return;
           }
@@ -964,6 +1013,241 @@ export class DataProvider {
     this.dataHistory(domain, this.indicatorHistory.bind(this));
   }
 
+  /**
+   * Decide whether selecting `data` for `paneIdx` should REPLACE the current
+   * ticker (the target pane already shows candles) or fall through to the
+   * normal "add data" flow.
+   *
+   * @returns {boolean} true  -> handled (replaced, or already present; do NOT addData)
+   *                    false -> caller should run the normal defaultAddData flow
+   */
+  selectDataForPane(data, paneIdx) {
+    const existingData = this.config.data.find((d) => d.type === "data");
+
+    // Same ticker? No-op.
+    if (
+      existingData &&
+      existingData.name === data.name &&
+      existingData.source === data.source
+    ) {
+      return true;
+    }
+
+    // Resolve pane (tolerate 0-based and 1-based indices)
+    const pane =
+      this.chart.panes[paneIdx] || this.chart.panes[paneIdx - 1] || null;
+
+    // Check if target pane already has price data (candlesticks)
+    let paneHasPriceData = false;
+    if (pane && Array.isArray(pane.metadata)) {
+      for (let j = 0; j < pane.metadata.length && !paneHasPriceData; j++) {
+        const meta = pane.metadata[j];
+        if (Array.isArray(meta.dataKeys)) {
+          for (let k = 0; k < meta.dataKeys.length; k++) {
+            const dk = meta.dataKeys[k].dataKey || meta.dataKeys[k];
+            const kd = this.keyToData[dk];
+            if (
+              kd &&
+              ["open", "high", "low", "close", "volume"].includes(kd.key)
+            ) {
+              paneHasPriceData = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Replace when the target pane is a price pane and we already have a source
+    if (paneHasPriceData && existingData) {
+      this.switchTicker(existingData.name, data.name);
+      return true;
+    }
+
+    return false;
+  }
+
+  switchTicker(oldName, newName) {
+    const dataItem = this.config.data.find((d) => d.type === "data");
+    if (!dataItem) return;
+
+    const source = dataItem.source || "CCXT";
+
+    const currentPrefix = `${source}-${oldName}-${this.interval}`;
+    const newPrefix = `${source}-${newName}-${this.interval}`;
+
+    // The first ticker loaded becomes the stable rendering prefix.
+    // All future tickers will be remapped into these original keys.
+    if (!this._renderPrefix) {
+      this._renderPrefix = currentPrefix;
+    }
+
+    const renderPrefix = this._renderPrefix;
+
+    this._tickerRename = {
+      from: newPrefix,
+      to: renderPrefix,
+    };
+
+    this._switchingTicker = true;
+
+    // 1. Update logical config for backend + indicators
+    for (let i = 0; i < this.config.data.length; i++) {
+      const item = this.config.data[i];
+
+      if (item.type === "data" && item.name === oldName) {
+        item.name = newName;
+        item.count = 300;
+      }
+
+      if (item.type === "indicator" && item.dataMap) {
+        for (let key in item.dataMap) {
+          const dm = item.dataMap[key];
+
+          if (dm.name === oldName) {
+            dm.name = newName;
+          }
+
+          // IMPORTANT:
+          // dataMap.value often contains the full column key, for example:
+          // CCXT-SOL/USDT-15m-close
+          if (
+            dm.value &&
+            typeof dm.value === "string" &&
+            dm.value.includes(oldName)
+          ) {
+            dm.value = dm.value.replaceAll(oldName, newName);
+          }
+        }
+      }
+    }
+
+    // 2. Force price dividers to recalculate for the new ticker magnitude.
+    // The UI still uses the original/render keys, so delete those dividers.
+    // IMPORTANT:
+    // Reset ALL divider state.
+    // If dividersPerAxis is kept, new ticker values inherit the old axis divider,
+    // which causes inflated Y-axis values like ETH showing as 300K.
+    this.dividers = {};
+    this.dividersPerAxis = {};
+
+    // 3. Clear current data safely.
+    this.data = [];
+    this.dateToIndexMap = new Map();
+
+    // 4. Reset indicator re-initialization.
+    this._indicatorsOnDataInitAdded = false;
+    this.indicatorsToAddOnDataInit = [];
+
+    // 5. Optional visual label update.
+    const previousDisplayName = this._displayName || oldName;
+    this._displayName = newName;
+    this._updateTickerLabels(previousDisplayName, newName);
+
+    // 6. Tell backend to switch live streams/subscriptions.
+    const switchMsg = {
+      type: "switch_ticker",
+      source: source,
+      interval: this.interval,
+      old_name: oldName,
+      new_name: newName,
+    };
+
+    this.ws.sendMessage(JSON.stringify([switchMsg]));
+
+    // 7. Re-send normal subscriptions.
+    // This triggers the normal data_init path, which is the most stable path.
+    const datas = [];
+
+    for (let i = 0; i < this.config.data.length; i++) {
+      const item = this.config.data[i];
+
+      if (item.type === "data") {
+        datas.push(item);
+      }
+
+      if (item.type === "indicator") {
+        this.indicatorsToAddOnDataInit.push(item);
+      }
+    }
+
+    this.ws.sendMessage(JSON.stringify(datas));
+  }
+
+  _remapActiveTickerKeys(input) {
+    if (!this._tickerRename || input == null) {
+      return input;
+    }
+
+    const fromPrefix = `${this._tickerRename.from}-`;
+    const toPrefix = `${this._tickerRename.to}-`;
+
+    const remapObject = (obj) => {
+      if (!obj || typeof obj !== "object") {
+        return obj;
+      }
+
+      for (const k of Object.keys(obj)) {
+        if (k.startsWith(fromPrefix)) {
+          const stableKey = toPrefix + k.slice(fromPrefix.length);
+          obj[stableKey] = obj[k];
+          delete obj[k];
+        }
+      }
+
+      return obj;
+    };
+
+    if (Array.isArray(input)) {
+      for (let i = 0; i < input.length; i++) {
+        remapObject(input[i]);
+      }
+    } else {
+      remapObject(input);
+    }
+
+    return input;
+  }
+
+  _updateTickerLabels(oldName, newName) {
+    if (!this.chart || !this.chart.panes) return;
+
+    const replace = (value) => {
+      if (typeof value !== "string") return value;
+      return value.replaceAll(oldName, newName);
+    };
+
+    for (let i = 0; i < this.chart.panes.length; i++) {
+      const pane = this.chart.panes[i];
+
+      if (pane.title) {
+        pane.title = replace(pane.title);
+      }
+
+      if (!pane.metadata) continue;
+
+      for (let j = 0; j < pane.metadata.length; j++) {
+        const meta = pane.metadata[j];
+
+        if (meta.name === oldName) {
+          meta.name = newName;
+        }
+
+        if (meta.label) {
+          meta.label = replace(meta.label);
+        }
+
+        if (meta.legend && Array.isArray(meta.legend)) {
+          for (let k = 0; k < meta.legend.length; k++) {
+            if (meta.legend[k] && meta.legend[k].label) {
+              meta.legend[k].label = replace(meta.legend[k].label);
+            }
+          }
+        }
+      }
+    }
+  }
+
   dataHistory(domain, onLoaded) {
     const dataConfig = JSON.parse(JSON.stringify(this.config.data));
     const h = [];
@@ -999,7 +1283,7 @@ export class DataProvider {
 
     this.ws.sendMessage(JSON.stringify(h));
   }
-  indicatorHistory() {
+    indicatorHistory() {
     const dataConfig = JSON.parse(JSON.stringify(this.config.data));
     const h = [];
     for (let i = 0; i < dataConfig.length; i++) {
@@ -1021,14 +1305,14 @@ export class DataProvider {
         }
         if (found) break;
       }
-
-      d.range = [
-        this.data[0]._date,
-        d.end ? d.end : this.data[this.data.length - 1]._date,
-      ];
+      if (this.data && this.data.length > 0) {
+        d.range = [
+          this.data[0]._date,
+          d.end ? d.end : this.data[this.data.length - 1]._date,
+        ];
+      }
       h.push(d);
     }
-
     if (h.length) {
       this._indicatorHistory = h;
       this.ws.sendMessage(JSON.stringify(h));

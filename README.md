@@ -100,3 +100,6 @@ Drastically improved accuracy for superior alerts (laying the foundation)
 - CLOSED candle means CLOSED
 - Added CCXT Pro and fallback to polling
 - OHLCV (Open, High, Low, Close, Volume) for improved alerts
+### Added Ticker Switching While Preserving Indicators
+In order to use this feature - simply click "+" -> "Data" tab -> Choose your ticker -> Add it to Pane that has current ticker
+> Tested with default axis options
