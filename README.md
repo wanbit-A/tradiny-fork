@@ -106,3 +106,5 @@ In order to use this feature - simply click "+" -> "Data" tab -> Choose your tic
 ###### Fixed Minor Warning Bug
 import { DequeOfSegmentTrees, ops } from "./tree4.js";
 > Removed that "ops"
+### Enriched Webhook Data
+- [ ] Go to docs/docs/webhook-data-n8n-example.md to see real data that webhook can output for your n8n or any other workflow

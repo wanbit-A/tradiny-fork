@@ -14,6 +14,15 @@
         <input type="text" class="alert-webhook-url" placeholder="https://example.com/webhook">
       </div>
       <div class="input-group" style="margin-bottom: 15px">
+        <label>Signal type</label>
+        <select class="alert-signal-type">
+          <option value="">— none —</option>
+          <option value="ENTRY">ENTRY</option>
+          <option value="TP_EXIT">TP_EXIT</option>
+          <option value="SL_EXIT">SL_EXIT</option>
+        </select>
+      </div>
+      <div class="input-group" style="margin-bottom: 15px">
         <label>Recurring</label>
         <input type="checkbox" class="alert-recurring" style="flex: 0 0 auto; width: auto;">
       </div>

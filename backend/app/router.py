@@ -395,6 +395,7 @@ async def process_message(
                                 "id": a["id"],
                                 "message": a["settings"].get("message"),
                                 "webhook_url": a["settings"].get("webhook_url"),
+                                "signal_type": a["settings"].get("signal_type"),
                                 "status": alert_status(a),
                                 "created_at": (
                                     a["created_at"].isoformat()
@@ -421,6 +422,8 @@ async def process_message(
                         settings["message"] = d["message"]
                     if "webhook_url" in d:
                         settings["webhook_url"] = d["webhook_url"]
+                    if "signal_type" in d:
+                        settings["signal_type"] = d["signal_type"] or None
                     update_alert_settings(dbconn, alert_id, settings)
                     success = True
 

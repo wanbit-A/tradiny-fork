@@ -1140,6 +1140,9 @@ export class DOMControlsHandler {
       .select("input.alert-webhook-url")
       .property("value")
       .trim();
+    const signalType = this.chart.d3ContainerEl
+      .select("select.alert-signal-type")
+      .property("value");
     const recurring = this.chart.d3ContainerEl
       .select("input.alert-recurring")
       .property("checked");
@@ -1148,6 +1151,9 @@ export class DOMControlsHandler {
       alertObj.message = message;
       if (webhookUrl) {
         alertObj.webhook_url = webhookUrl;
+      }
+      if (signalType) {
+        alertObj.signal_type = signalType;
       }
       alertObj.recurring = recurring;
       this.chart.dataProvider.addAlert(alertObj);
@@ -1212,6 +1218,26 @@ export class DOMControlsHandler {
           .attr("placeholder", "https://example.com/webhook")
           .property("value", a.webhook_url || "");
 
+        // Signal type field
+        const stGroup = itemEl.append("div").attr("class", "input-group");
+        stGroup.append("label").text("Signal type");
+        const stSelect = stGroup
+          .append("select")
+          .attr("class", "alert-item-signal-type")
+          .attr("data-id", a.id);
+        [
+          { v: "", t: "— none —" },
+          { v: "ENTRY", t: "ENTRY" },
+          { v: "TP_EXIT", t: "TP_EXIT" },
+          { v: "SL_EXIT", t: "SL_EXIT" },
+        ].forEach((o) => {
+          stSelect
+            .append("option")
+            .attr("value", o.v)
+            .property("selected", (a.signal_type || "") === o.v)
+            .text(o.t);
+        });
+
         // Actions - plain input[type=button], same as every other button in the app
         const actionsEl = itemEl
           .append("div")
@@ -1240,10 +1266,13 @@ export class DOMControlsHandler {
       .select(`.alert-item-webhook[data-id="${id}"]`)
       .property("value")
       .trim();
+    const signalType = this.chart.d3ContainerEl
+      .select(`.alert-item-signal-type[data-id="${id}"]`)
+      .property("value");
 
     this.chart.dataProvider.updateAlert(
       id,
-      { message, webhook_url: webhookUrl },
+      { message, webhook_url: webhookUrl, signal_type: signalType },
       () => {
         // no-op: could show a saved indicator here
       },
