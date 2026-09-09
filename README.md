@@ -108,3 +108,6 @@ import { DequeOfSegmentTrees, ops } from "./tree4.js";
 > Removed that "ops"
 ### Enriched Webhook Data
 - [ ] Go to docs/docs/webhook-data-n8n-example.md to see real data that webhook can output for your n8n or any other workflow
+###### Webhook's Key "close" = Terminal Log CLOSED
+> Probably... I haven't tested, but suppose it to be true
+> Will edit if it turns out to be false

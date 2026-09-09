@@ -273,7 +273,16 @@ def alert_evaluate(dbconn, message, alert, data):
 
     elif message["type"] == "data_update":
         # Live / forming candle.
-        lastDataPoint.update(message["data"])
+        if evaluate_on == "intrabar":
+            # Intrabar mode: everything is live, close included.
+            lastDataPoint.update(message["data"])
+        else:
+            # Close mode: stream O/H/L/V live, but keep every "-close" key
+            # pinned to the last confirmed close. "close" must always mean
+            # the CLOSED candle value; the other keys are live estimates.
+            for k, v in message["data"].items():
+                if not k.endswith("-close"):
+                    lastDataPoint[k] = v
         should_evaluate = evaluate_on == "intrabar"
 
     elif message["type"] == "candle_close":
@@ -290,13 +299,10 @@ def alert_evaluate(dbconn, message, alert, data):
 
     elif message["type"] == "indicator_update":
         lastDataPoint.update(message["data"])
-        # Indicator updates ride the same cadence as the candle event
-        # that triggered them; only evaluate if we are in intrabar mode
-        # or if the message itself is from a close path (closed flag).
-        should_evaluate = (
-            evaluate_on == "intrabar"
-            or message.get("closed") is True
-        )
+        # The backend never sets "closed" on indicator payloads, so this
+        # event only evaluates in intrabar mode. In close mode, indicator
+        # rules fire on the candle_close event.
+        should_evaluate = evaluate_on == "intrabar"
 
     data["lastDataPoint"] = lastDataPoint
 
