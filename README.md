@@ -103,3 +103,6 @@ Drastically improved accuracy for superior alerts (laying the foundation)
 ### Added Ticker Switching While Preserving Indicators
 In order to use this feature - simply click "+" -> "Data" tab -> Choose your ticker -> Add it to Pane that has current ticker
 > Tested with default axis options
+###### Fixed Minor Warning Bug
+import { DequeOfSegmentTrees, ops } from "./tree4.js";
+> Removed that "ops"

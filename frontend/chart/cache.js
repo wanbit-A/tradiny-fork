@@ -12,7 +12,7 @@
  * For full details, see the LICENSE.md file in the root directory of this project.
  */
 
-import { DequeOfSegmentTrees, ops } from "./tree4.js";
+import { DequeOfSegmentTrees } from "./tree4.js";
 
 export class CacheHandler {
   constructor(chart) {
