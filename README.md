@@ -1,4 +1,6 @@
 # Tradiny (Fork)
+> Original: https://github.com/tradiny/tradiny
+
 > This fork focuses on webhook alerts integration as a free alternative to TradingView's & TakeProfit's indicator-based alerts with webhooks
 - Essential for free indicator-based trading
 > Second part is the actual n8n workflow
